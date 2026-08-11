@@ -455,13 +455,13 @@ proc roleForSeat(seat: int, team: Team): Role =
     case seat
     of 0:
       when tuneExtraDefenders >= 2: HomeDefender
-      else: FlankBottom          # wide bottom lane, get behind the contest
+      else: MidBottom            # small rosters need a direct flag-racing rusher
     of 1:
       when tuneExtraDefenders >= 3: HomeDefender
       else: MidGuard               # third mid, trails offset high and cleans up
     of 2: (if team == Blue: MidTop else: MidBottom)
     of 3: (if team == Red: MidTop else: MidBottom)
-    of 4: MidBottom        # fourth mid: the second trailing attacker
+    of 4: FlankBottom      # preserve the full-roster role mix off the lead seat
     of 5: Overwatch        # cover post flanking the ring: the lane sniper
     of 6:
       when tuneExtraDefenders >= 1: HomeDefender
