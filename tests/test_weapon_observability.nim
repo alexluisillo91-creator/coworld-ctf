@@ -32,11 +32,13 @@ suite "weapon observability":
     discard game.addPlayer("blue0")
     game.startGame()
     var ls = game.labels(viewer)
-    check "weapon gun" in ls
+    check ls.countIt(it == "weapon gun") == 1
+    check "weapon spray" notin ls
     check ls.anyIt(it.startsWith("identity ") and it.endsWith(" gun"))
     game.players[viewer].hasPlasmaArc = true
     ls = game.labels(viewer)
-    check "weapon spray" in ls
+    check ls.countIt(it == "weapon spray") == 1
+    check "weapon gun" notin ls
     check ls.anyIt(it.startsWith("identity ") and it.endsWith(" spray"))
 
   test "the board swaps the HELD weapon art to the can while one is carried":
