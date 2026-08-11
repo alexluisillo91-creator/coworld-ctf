@@ -98,11 +98,11 @@ const
 
   tuneCarrierFireRange {.intdefine.} = 110 # while carrying, only shoot enemies this close
   CarrierFireRange = float(tuneCarrierFireRange)
-  tuneRushEngageRange {.intdefine.} = 230 # racing for the steal: only fight what blocks it
+  tuneRushEngageRange {.intdefine.} = 0 # opening rusher wins by touching the flag, not duelling
   RushEngageRange = float(tuneRushEngageRange)
   tuneEscortEngageRange {.intdefine.} = 320 # escorting a run: only fight near threats
   EscortEngageRange = float(tuneEscortEngageRange)
-  tunePocketRushRange {.intdefine.} = 210 # this close to the enemy pedestal, just GRAB
+  tunePocketRushRange {.intdefine.} = 360 # commit early enough to cross the defended pocket
   PocketRushRange = float(tunePocketRushRange)
   ThreatRange = 200.0         # react to a visible enemy this close facing us
   DuckRange = 340.0           # duck from remembered threats this close on cooldown
