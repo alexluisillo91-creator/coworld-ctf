@@ -112,7 +112,7 @@ const
                               # the 5-tick windup releases the bullet late
   TrackMatchDist = 40.0       # a sighting matches a track within this distance
   TrackTtl = 120              # forget a player not seen for ~5s
-  TrackCap = 8                # eight real opponents / teammates per side
+  TrackCapPerTeam = 8         # at most eight real players on any one team
   FreshShotTicks = 24         # only fire at tracks seen this recently; the
                               # turret needs traverse time, so chases keep
                               # shooting a bit after the target fogs out
@@ -596,6 +596,19 @@ proc ownAimBrads(client: ProtocolClient): int =
         return parseInt(tail)
       except ValueError:
         return -1
+  -1
+
+proc ownWeaponSpray(client: ProtocolClient): int =
+  ## Authoritative own-weapon state from the HUD marker: 1 for spray, 0 for
+  ## gun, or -1 when talking to a pre-marker engine. Unlike the carried-item
+  ## sprite, this marker is owned by the observing player and cannot be
+  ## confused with a nearby carrier.
+  for (_, label) in client.spriteObjectsWithLabelPrefix(LabelPrefixWeapon):
+    let token = label[LabelPrefixWeapon.len .. ^1]
+    if token == LabelWeaponSpray:
+      return 1
+    if token == LabelWeaponGun:
+      return 0
   -1
 
 proc findSelf(
@@ -1268,7 +1281,16 @@ proc findPeekCell(bot: Bot, client: ProtocolClient, me, aim: Vec): int =
         bestD = d
         result = nc
 
-proc updateTracks(bot: Bot, tracks: var seq[Track], seen: seq[Actor]) =
+func enemyTrackCapacity(teamCount: int): int =
+  ## One full opposing roster per other team: 8 in classic, 24 in 4FFA.
+  max(1, teamCount - 1) * TrackCapPerTeam
+
+static:
+  doAssert enemyTrackCapacity(2) == 8
+  doAssert enemyTrackCapacity(4) == 24
+
+proc updateTracks(
+    bot: Bot, tracks: var seq[Track], seen: seq[Actor], trackCap: int) =
   ## Matches this frame's sightings to remembered tracks and prunes stale
   ## ones. Velocity is a blended px/tick estimate used to lead shots.
   var claimed = newSeq[bool](tracks.len)
@@ -1316,8 +1338,8 @@ proc updateTracks(bot: Bot, tracks: var seq[Track], seen: seq[Actor]) =
     if bot.tick - t.lastSeen <= ttl:
       kept.add(t)
   kept.sort(proc(a, b: Track): int = cmp(b.lastSeen, a.lastSeen))
-  if kept.len > TrackCap:                # there are only eight real players
-    kept.setLen(TrackCap)
+  if kept.len > trackCap:
+    kept.setLen(trackCap)
   tracks = kept
 
 proc trackPickups(
@@ -1571,13 +1593,16 @@ proc decide(bot: Bot, client: ProtocolClient): uint8 {.measure.} =
     shieldSeen.add(client.mapPos(o))
   trackPickups(bot.plasmaPos, bot.plasmaAbsentAt, plasmaSeen, me, bot.tick)
   trackPickups(bot.shieldPos, bot.shieldAbsentAt, shieldSeen, me, bot.tick)
-  # Own carry state: the carried markers float over their carrier, and a
-  # shield carrier's HUD reads 6 hp (the marker is the fallback).
-  var hasPlasma = false
-  for o in client.spriteObjectsWithLabel(LabelSprayCanCarried):
-    if dist(client.mapPos(o), me) <= 30.0:
-      hasPlasma = true
-      break
+  # Own carry state: the weapon HUD is authoritative. Fall back to proximity
+  # matching the carried marker only for pre-marker engines. A nearby enemy
+  # or teammate can otherwise make us mistake our gun for a spray can.
+  let statedWeaponSpray = client.ownWeaponSpray()
+  var hasPlasma = statedWeaponSpray == 1
+  if statedWeaponSpray < 0:
+    for o in client.spriteObjectsWithLabel(LabelSprayCanCarried):
+      if dist(client.mapPos(o), me) <= 30.0:
+        hasPlasma = true
+        break
   var hasShield = bot.hp > MaxHp
   if not hasShield:
     for o in client.spriteObjectsWithLabel(LabelShieldCarried):
@@ -1596,8 +1621,12 @@ proc decide(bot: Bot, client: ProtocolClient): uint8 {.measure.} =
     let c = TeamColorNames[i]
     if c != myColor:
       seenEnemies.add(client.actorsFor(c))
-  bot.updateTracks(bot.enemies, seenEnemies)
-  bot.updateTracks(bot.mates, seenMates)
+  # In classic there is one opposing eight-seat team. A 4FFA frame has three,
+  # so retaining all visible opponents needs 24 slots (and a 3-team frame, if
+  # supplied, naturally gets 16). Teammates remain one team's eight seats.
+  let enemyTrackCap = enemyTrackCapacity(GameTeams)
+  bot.updateTracks(bot.enemies, seenEnemies, enemyTrackCap)
+  bot.updateTracks(bot.mates, seenMates, TrackCapPerTeam)
   if seenEnemies.len > 0:
     bot.lastEnemySeen = bot.tick
 
